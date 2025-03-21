@@ -37,7 +37,7 @@ cursor.execute("""
 """)
 conn.commit()
 
-
+# Generate licence function
 def generate_license(client_id, license_type, duration_days):
     """Generates a signed license and stores it in SQLite."""
     issued_at = datetime.datetime.utcnow()
@@ -66,14 +66,14 @@ def generate_license(client_id, license_type, duration_days):
     except sqlite3.IntegrityError:
         return "Error: License for this client already exists!"
 
-
+# Revoke licence function
 def revoke_license(client_id):
     """Marks a license as revoked."""
     cursor.execute("UPDATE licenses SET status = 'revoked' WHERE client_id = ?", (client_id,))
     conn.commit()
     return f"License for {client_id} has been revoked."
 
-
+# Reactivate licence function
 def reactivate_license(client_id, additional_days):
     """Reactivates an expired/revoked license by extending its validity."""
     cursor.execute("SELECT exp, license_type FROM licenses WHERE client_id = ?", (client_id,))
@@ -97,13 +97,13 @@ def reactivate_license(client_id, additional_days):
     conn.commit()
     return f"License for {client_id} reactivated until {new_exp_str}."
 
-
+# List all licence
 def get_all_licenses():
     """Retrieves all licenses from the database."""
     cursor.execute("SELECT client_id, license_type, issued_at, exp, signature, status FROM licenses")
     return cursor.fetchall()
 
-
+# Render html
 class RequestHandler(SimpleHTTPRequestHandler):
     """Handles HTTP GET and POST requests."""
 
