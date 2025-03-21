@@ -29,8 +29,8 @@ cursor.execute("""
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         client_id TEXT UNIQUE NOT NULL,
         license_type TEXT NOT NULL,
-        issued_at INTEGER NOT NULL,
-        exp INTEGER NOT NULL,
+        issued_at TEXT NOT NULL,  -- Stored as ISO 8601 string
+        exp TEXT NOT NULL,  -- Stored as ISO 8601 string
         signature TEXT NOT NULL
     )
 """)
@@ -38,16 +38,16 @@ conn.commit()
 
 
 def generate_license(client_id, license_type, duration_days):
-    """ Generates a signed license and stores it in SQLite. """
-    expiration_date = datetime.datetime.utcnow() + datetime.timedelta(days=duration_days)
-    exp_timestamp = int(expiration_date.timestamp())
+    """Generates a signed license and stores it in SQLite with datetime fields."""
+    issued_at = datetime.datetime.utcnow()
+    expiration_date = issued_at + datetime.timedelta(days=duration_days)
 
     # License data
     license_data = {
         "client_id": client_id,
         "license_type": license_type,
-        "exp": exp_timestamp,
-        "issued_at": int(datetime.datetime.utcnow().timestamp()),
+        "issued_at": issued_at.strftime("%Y-%m-%d %H:%M:%S"),  # Store as string
+        "exp": expiration_date.strftime("%Y-%m-%d %H:%M:%S"),  # Store as string
     }
 
     # Convert to JSON and sign
@@ -59,7 +59,7 @@ def generate_license(client_id, license_type, duration_days):
         cursor.execute("""
             INSERT INTO licenses (client_id, license_type, issued_at, exp, signature)
             VALUES (?, ?, ?, ?, ?)
-        """, (client_id, license_type, license_data["issued_at"], exp_timestamp, signature))
+        """, (client_id, license_type, license_data["issued_at"], license_data["exp"], signature))
         conn.commit()
         return json.dumps(license_data, indent=4)
     except sqlite3.IntegrityError:
