@@ -6,8 +6,9 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from licenses.models import UserAccount
-from licenses.serializers import UserAccountSerializer, UserCreateSerializer, CustomUserSerializer
+from licenses.models import UserAccount, License
+from licenses.serializers import UserAccountSerializer, UserCreateSerializer, CustomUserSerializer, LicenseSerializer
+from licenses.utils import generate_license, verify_license
 
 
 # Create your views here.
@@ -145,3 +146,41 @@ class UserInfoView(APIView):
         user = request.user
         serializer = CustomUserSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class LicenseViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        try:
+            licenses = License.objects.all()
+            serializer = LicenseSerializer(licenses, many=True, context={"request": request})
+            response_data = serializer.data
+            response_dict = {"error": False, "message": "All Licenses", "data": response_data}
+
+        except ValidationError as e:
+            response_dict = {"error": True, "message": "Validation Error", "details": str(e)}
+        except Exception as e:
+            response_dict = {"error": True, "message": "An Error Occurred", "details": str(e)}
+
+        return Response(response_dict,
+                        status=status.HTTP_400_BAD_REQUEST if response_dict['error'] else status.HTTP_200_OK)
+
+    def create(self, request):
+        client_id = request.data.get("client_id")
+        license_type = request.data.get("license_type")
+        exp = request.data.get("exp", None)
+
+        if not client_id or not license_type:
+            return Response({"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
+
+        license_obj = generate_license(client_id, license_type, exp)
+        return Response({"message": "License created", "data": LicenseSerializer(license_obj).data}, status=status.HTTP_201_CREATED)
+
+    def verify(self, request, pk=None):
+        try:
+            license_obj = License.objects.get(pk=pk)
+            is_valid = verify_license(license_obj)
+            return Response({"valid": is_valid}, status=status.HTTP_200_OK)
+        except License.DoesNotExist:
+            return Response({"error": "License not found"}, status=status.HTTP_404_NOT_FOUND)
