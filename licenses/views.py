@@ -7,12 +7,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from licenses.models import UserAccount
+from licenses.serializers import UserAccountSerializer, UserCreateSerializer, CustomUserSerializer
 
 
 # Create your views here.
 
 class UserViewSet(viewsets.ViewSet):
-    permission_classes_by_action = {'create': [AllowAny], 'list': [IsAdminUser], 'verify_otp': [AllowAny], 'default': [IsAuthenticated]}
+    permission_classes_by_action = {
+        'create': [AllowAny],
+        'list': [IsAdminUser],
+        'default': [IsAuthenticated]
+    }
 
     def get_permissions(self):
         return [permission() for permission in self.permission_classes_by_action.get(self.action, self.permission_classes_by_action['default'])]
@@ -39,8 +44,8 @@ class UserViewSet(viewsets.ViewSet):
             password = make_password(serializer.validated_data['password'])
             serializer.validated_data['password'] = password
 
-            # Set the user as inactive
-            serializer.validated_data['is_active'] = False
+            # Set the user as active
+            serializer.validated_data['is_active'] = True
             serializer.save()
 
             return Response({'message': 'OTP sent to email'}, status=status.HTTP_201_CREATED)
@@ -77,7 +82,7 @@ class UserViewSet(viewsets.ViewSet):
 class AdminUserViewSet(viewsets.ViewSet):
     permission_classes_by_action = {
         'create': [AllowAny],
-        'verify_otp': [AllowAny],
+        'list': [IsAdminUser],
         'default': [IsAuthenticated]
     }
 
