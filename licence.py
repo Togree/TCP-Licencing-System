@@ -77,27 +77,24 @@ def revoke_license(client_id):
 
 
 # Validate licence
-def validate_license(client_id):
-    """Validates a license: checks if it's revoked, expired, or tampered with."""
+def validate_license(client_id, provided_signature):
+    """Validates a license using the client-provided signature."""
     cursor.execute("SELECT license_type, issued_at, exp, signature, status FROM licenses WHERE client_id = ?", (client_id,))
     license = cursor.fetchone()
 
     if not license:
-        return "License not found."
+        return {"status": "error", "message": "License not found."}
 
-    license_type, issued_at, exp_date, signature, status = license
+    license_type, issued_at, exp_date, stored_signature, status = license
 
-    # Check if the license is revoked
     if status == "revoked":
-        return f"License for {client_id} is revoked."
+        return {"status": "error", "message": "License is revoked."}
 
-    # Check if the license is expired
     if license_type != "Premium" and exp_date != "Never":
         expiration = datetime.datetime.strptime(exp_date, "%Y-%m-%d %H:%M:%S")
         if datetime.datetime.utcnow() > expiration:
-            return f"License for {client_id} has expired."
+            return {"status": "error", "message": "License has expired."}
 
-    # Verify Digital Signature (to prevent tampering)
     license_data = {
         "client_id": client_id,
         "license_type": license_type,
@@ -107,12 +104,14 @@ def validate_license(client_id):
     license_json = json.dumps(license_data)
 
     try:
-        rsa.verify(license_json.encode(), bytes.fromhex(signature), public_key)
-    except rsa.VerificationError:
-        return "License validation failed: Possible tampering detected!"
+        if provided_signature != stored_signature:
+            return {"status": "error", "message": "Signature mismatch."}
 
-    return f"License for {client_id} is valid."
-print(validate_license("trackgree.com"))
+        rsa.verify(license_json.encode(), bytes.fromhex(provided_signature), public_key)
+        return {"status": "success", "message": "License is valid."}
+
+    except rsa.VerificationError:
+        return {"status": "error", "message": "Invalid signature or license tampered with."}
 
 
 # Reactivate licence function
@@ -160,7 +159,44 @@ class RequestHandler(SimpleHTTPRequestHandler):
             self.wfile.write(self.get_html_form().encode())
 
     def do_POST(self):
-        """Handles form submission, license generation, revocation, and reactivation."""
+        """Handles license validation via JSON request."""
+        if self.path == "/validate_license":  # Ensure it's the correct endpoint
+            content_length = int(self.headers["Content-Length"])
+            post_data = self.rfile.read(content_length)
+
+            try:
+                data = json.loads(post_data)
+                client_id = data.get("client_id")
+                provided_signature = data.get("signature")
+
+                if not client_id or not provided_signature:
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": "Missing client_id or signature"}).encode())
+                    return
+
+                # Call the validate_license function
+                response = validate_license(client_id, provided_signature)
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode())
+
+            except json.JSONDecodeError:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Invalid JSON format"}).encode())
+        else:
+            self.send_response(404)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Endpoint not found"}).encode())
+
+    def do_POST(self):
+        """Handles form submission, license generation, revocation, reactivation, and validation."""
         content_length = int(self.headers["Content-Length"])
         post_data = self.rfile.read(content_length)
         data = parse_qs(post_data.decode())
