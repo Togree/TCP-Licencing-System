@@ -25,8 +25,8 @@ def generate_rsa_key_pair():
         os.makedirs(KEYS_DIR)  # Create the directory if it doesn't exist
 
     # Debugging: Print where the keys will be stored
-    print(f"🔍 Private Key Path: {RSA_PRIVATE_KEY_PATH}")
-    print(f"🔍 Public Key Path: {RSA_PUBLIC_KEY_PATH}")
+    print(f"Private Key Path: {RSA_PRIVATE_KEY_PATH}")
+    print(f"Public Key Path: {RSA_PUBLIC_KEY_PATH}")
 
     if not os.path.exists(RSA_PRIVATE_KEY_PATH) or not os.path.exists(RSA_PUBLIC_KEY_PATH):
         private_key = rsa.generate_private_key(
@@ -53,11 +53,11 @@ def generate_rsa_key_pair():
             with open(RSA_PUBLIC_KEY_PATH, "wb") as f:
                 f.write(public_pem)
 
-            print(f"✅ RSA Key Pair Generated Successfully! Keys saved in {KEYS_DIR}")
+            print(f"RSA Key Pair Generated Successfully! Keys saved in {KEYS_DIR}")
         except Exception as e:
-            print(f"❌ Error saving keys: {e}")
+            print(f"Error saving keys: {e}")
     else:
-        print(f"⚠️ RSA Key Pair Already Exists in {KEYS_DIR}.")
+        print(f"RSA Key Pair Already Exists in {KEYS_DIR}.")
 
 
 def load_rsa_keys():
