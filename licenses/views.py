@@ -46,6 +46,9 @@ class UserViewSet(viewsets.ViewSet):
 
             # Set the user as active
             serializer.validated_data['is_active'] = True
+
+            # Set usertype as admin
+            serializer.validated_data['user_type'] = 'normal'
             serializer.save()
 
             return Response({'message': 'OTP sent to email'}, status=status.HTTP_201_CREATED)
@@ -98,6 +101,10 @@ class AdminUserViewSet(viewsets.ViewSet):
 
             # Set the user as active
             serializer.validated_data['is_active'] = True
+
+            # Set usertype as admin
+            serializer.validated_data['user_type'] = 'admin'
+
             serializer.save()
 
             return Response({'message': 'Account created succesfuly'}, status=status.HTTP_201_CREATED)
