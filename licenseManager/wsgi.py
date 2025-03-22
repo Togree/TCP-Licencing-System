@@ -11,6 +11,10 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
+# Ensure RSA keys are generated
+from licenses.utils import generate_rsa_key_pair
+generate_rsa_key_pair()
+
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'licenseManager.settings')
 
 application = get_wsgi_application()
