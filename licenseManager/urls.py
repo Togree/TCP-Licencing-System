@@ -7,11 +7,12 @@ from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from licenseManager import settings
-from licenses.views import UserViewSet, AdminUserViewSet, UserInfoView
+from licenses.views import UserViewSet, AdminUserViewSet, UserInfoView, LicenseViewSet
 
 router = routers.DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
 router.register(r'admin/users', AdminUserViewSet, basename='admin-user')
+router.register(r'licenses', LicenseViewSet, basename='license')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
