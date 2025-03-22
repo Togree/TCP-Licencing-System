@@ -57,9 +57,16 @@ class License(models.Model):
         ('revoked', 'Revoked'),
     ]
 
+    LICENSE_CHOICES = [
+        ('basic', 'Basic'),
+        ('pro', 'Pro'),
+        ('enterprise', 'Enterprise'),
+        ('premium', 'Premium'),
+    ]
+
     client_id = models.CharField(max_length=255, unique=True)
-    license_type = models.CharField(max_length=100)
-    issued_at = models.DateTimeField()
+    license_type = models.CharField(max_length=100, choices=LICENSE_CHOICES, default='basic')
+    issued_at = models.DateTimeField(auto_now_add=True)
     exp = models.DateTimeField(null=True, blank=True)
     signature = models.TextField()
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
