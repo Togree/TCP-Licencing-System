@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="DBNavigator.Project.DDLFileAttachmentManager">
-    <mappings />
-    <preferences />
+  <component name="DBNavigator.Project.DataEditorManager">
+    <record-view-column-sorting-type value="BY_INDEX" />
+    <value-preview-text-wrapping value="true" />
+    <value-preview-pinned value="false" />
   </component>
   <component name="DBNavigator.Project.DatabaseBrowserManager">
     <autoscroll-to-editor value="false" />
@@ -14,6 +15,9 @@
     <connection id="f990a778-6f03-4204-9304-7cb9c55d2238">
       <console name="Connection" type="STANDARD" schema="" session="Main" />
     </connection>
+  </component>
+  <component name="DBNavigator.Project.DatabaseEditorStateManager">
+    <last-used-providers />
   </component>
   <component name="DBNavigator.Project.DatabaseFileManager">
     <open-files />
@@ -34,15 +38,13 @@
           <database-type value="SQLITE" />
           <config-type value="BASIC" />
           <database-version value="3.45" />
-          <driver-source value="BUNDLED" />
+          <driver-source value="EXTERNAL" />
           <driver-library value="" />
           <driver value="" />
           <url-type value="FILE" />
           <host value="" />
           <port value="" />
           <database value="" />
-          <tns-folder value="" />
-          <tns-profile value="" />
           <files>
             <file path="$PROJECT_DIR$/db.sqlite3" schema="main" />
           </files>
@@ -85,17 +87,8 @@
           <max-connection-pool-size value="7" />
           <alternative-statement-delimiter value="" />
         </details>
-        <debugger>
-          <compile-dependencies value="true" />
-          <tcp-driver-tunneling value="false" />
-          <tcp-host-address value="" />
-          <tcp-port-from value="4000" />
-          <tcp-port-to value="4999" />
-          <debugger-type value="JDBC" />
-        </debugger>
-        <object-filters hide-empty-schemas="false" hide-pseudo-columns="false" hide-audit-columns="false">
-          <object-filters />
-          <object-type-filter use-master-settings="true">
+        <object-filters hide-empty-schemas="false" hide-pseudo-columns="false">
+          <object-type-filter>
             <object-type name="SCHEMA" enabled="true" />
             <object-type name="USER" enabled="true" />
             <object-type name="ROLE" enabled="true" />
@@ -122,6 +115,7 @@
             <object-type name="CLUSTER" enabled="true" />
             <object-type name="DBLINK" enabled="true" />
           </object-type-filter>
+          <object-name-filters />
         </object-filters>
       </connection>
     </connections>
@@ -130,7 +124,6 @@
         <display-mode value="TABBED" />
         <navigation-history-size value="100" />
         <show-object-details value="false" />
-        <enable-sticky-paths value="true" />
       </general>
       <filters>
         <object-type-filter>
@@ -272,7 +265,6 @@
       <confirmations>
         <save-changes value="false" />
         <revert-changes value="true" />
-        <exit-on-changes value="ASK" />
       </confirmations>
     </code-editor-settings>
     <code-completion-settings>
@@ -471,6 +463,10 @@
         <compile-dependencies value="ASK" />
         <always-show-controls value="false" />
       </compiler>
+      <debugger>
+        <debugger-type value="JDBC" />
+        <use-generic-runners value="true" />
+      </debugger>
     </operation-settings>
     <ddl-file-settings>
       <extensions>

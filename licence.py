@@ -37,6 +37,7 @@ cursor.execute("""
 """)
 conn.commit()
 
+
 # Generate licence function
 def generate_license(client_id, license_type, duration_days):
     """Generates a signed license and stores it in SQLite."""
@@ -66,12 +67,53 @@ def generate_license(client_id, license_type, duration_days):
     except sqlite3.IntegrityError:
         return "Error: License for this client already exists!"
 
+
 # Revoke licence function
 def revoke_license(client_id):
     """Marks a license as revoked."""
     cursor.execute("UPDATE licenses SET status = 'revoked' WHERE client_id = ?", (client_id,))
     conn.commit()
     return f"License for {client_id} has been revoked."
+
+
+# Validate licence
+def validate_license(client_id):
+    """Validates a license: checks if it's revoked, expired, or tampered with."""
+    cursor.execute("SELECT license_type, issued_at, exp, signature, status FROM licenses WHERE client_id = ?", (client_id,))
+    license = cursor.fetchone()
+
+    if not license:
+        return "License not found."
+
+    license_type, issued_at, exp_date, signature, status = license
+
+    # Check if the license is revoked
+    if status == "revoked":
+        return f"License for {client_id} is revoked."
+
+    # Check if the license is expired
+    if license_type != "Premium" and exp_date != "Never":
+        expiration = datetime.datetime.strptime(exp_date, "%Y-%m-%d %H:%M:%S")
+        if datetime.datetime.utcnow() > expiration:
+            return f"License for {client_id} has expired."
+
+    # Verify Digital Signature (to prevent tampering)
+    license_data = {
+        "client_id": client_id,
+        "license_type": license_type,
+        "issued_at": issued_at,
+        "exp": exp_date
+    }
+    license_json = json.dumps(license_data)
+
+    try:
+        rsa.verify(license_json.encode(), bytes.fromhex(signature), public_key)
+    except rsa.VerificationError:
+        return "License validation failed: Possible tampering detected!"
+
+    return f"License for {client_id} is valid."
+print(validate_license("trackgree.com"))
+
 
 # Reactivate licence function
 def reactivate_license(client_id, additional_days):
@@ -97,11 +139,13 @@ def reactivate_license(client_id, additional_days):
     conn.commit()
     return f"License for {client_id} reactivated until {new_exp_str}."
 
+
 # List all licence
 def get_all_licenses():
     """Retrieves all licenses from the database."""
     cursor.execute("SELECT client_id, license_type, issued_at, exp, signature, status FROM licenses")
     return cursor.fetchall()
+
 
 # Render html
 class RequestHandler(SimpleHTTPRequestHandler):
@@ -151,6 +195,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
             <tr>
                 <th>Client ID</th>
                 <th>License Type</th>
+                <th>Signature</th>
                 <th>Issued At</th>
                 <th>Expires At</th>
                 <th>Status</th>
@@ -163,6 +208,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
             <tr>
                 <td>{client_id}</td>
                 <td>{license[1]}</td>
+                <td>{license[4][:32]}...</td>
                 <td>{license[2]}</td>
                 <td>{license[3]}</td>
                 <td>{license[5]}</td>
@@ -214,7 +260,7 @@ class RequestHandler(SimpleHTTPRequestHandler):
 
 
 # Start the server
-server_address = ("", 8080)
+server_address = ("", 8000)
 httpd = HTTPServer(server_address, RequestHandler)
-print("🚀 Server running on http://localhost:8080")
+print("🚀 Server running on http://localhost:8000")
 httpd.serve_forever()
