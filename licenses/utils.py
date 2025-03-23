@@ -180,61 +180,6 @@ def verify_license(client_id, provided_signature):
     except Exception as e:
         return {"status": "error", "message": f"License verification failed: {str(e)}"}
 
-# def verify_license(client_id, provided_signature):
-#     """
-#     Verify a license by checking its signature and expiration.
-#
-#     :param client_id: The client's unique identifier.
-#     :param provided_signature: The signature received for verification (hex-encoded).
-#     :return: Dictionary with status and message.
-#     """
-#     try:
-#         # Load the system-wide public key
-#         _, public_key = load_rsa_keys()
-#
-#         # Fetch the license from Django ORM
-#         try:
-#             license_obj = License.objects.get(client_id=client_id)
-#         except License.DoesNotExist:
-#             return {"status": "error", "message": "License not found."}
-#
-#         # Check if the license is revoked
-#         if license_obj.status == "revoked":
-#             return {"status": "error", "message": "License is revoked."}
-#
-#         # Check expiration if it's not a Premium license
-#         if license_obj.license_type != "Premium" and license_obj.exp != "Never":
-#             expiration = datetime.datetime.strptime(license_obj.exp, "%Y-%m-%d %H:%M:%S")
-#             if now() > expiration:
-#                 return {"status": "error", "message": "License has expired."}
-#
-#         # Reconstruct the original license data
-#         license_data = {
-#             "client_id": client_id,
-#             "license_type": license_obj.license_type,
-#             "issued_at": license_obj.issued_at.strftime("%Y-%m-%d %H:%M:%S"),
-#             "exp": license_obj.exp
-#         }
-#         license_json = json.dumps(license_data, separators=(',', ':'), sort_keys=True).encode()
-#
-#         # Convert provided and stored signatures to bytes
-#         provided_signature_bytes = bytes.fromhex(provided_signature)
-#         stored_signature_bytes = bytes.fromhex(license_obj.signature)
-#
-#         # Check if the provided signature matches the stored one
-#         if provided_signature_bytes != stored_signature_bytes:
-#             return {"status": "error", "message": "Signature mismatch."}
-#
-#         # Verify the signature using RSA
-#         try:
-#             rsa.verify(license_json, provided_signature_bytes, public_key)
-#             return {"status": "success", "message": "License is valid."}
-#         except rsa.VerificationError:
-#             return {"status": "error", "message": "Invalid signature or license tampered with."}
-#
-#     except Exception as e:
-#         return {"status": "error", "message": f"License verification failed: {e}"}
-#
 
 # Revoke licence
 def revoke_license(client_id):

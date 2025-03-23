@@ -229,7 +229,6 @@ class LicenseViewSet(viewsets.ViewSet):
         return Response({"message": "License created", "data": LicenseSerializer(license_obj).data},
                         status=status.HTTP_201_CREATED)
 
-
     @action(detail=False, methods=["post"], permission_classes=[])  # No authentication required
     def verify(self, request):
         """Verify a license without authentication."""
@@ -241,3 +240,38 @@ class LicenseViewSet(viewsets.ViewSet):
 
         verification_result = verify_license(client_id, provided_signature)
         return Response(verification_result, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def revoke(self, request, pk=None):
+        """Revoke a license (Admin only)."""
+        try:
+            license_obj = License.objects.get(pk=pk)
+            if license_obj.status == "revoked":
+                return Response({"error": "License is already revoked."}, status=status.HTTP_400_BAD_REQUEST)
+            license_obj.status = "revoked"
+            license_obj.save()
+            return Response({"message": "License revoked successfully."}, status=status.HTTP_200_OK)
+        except License.DoesNotExist:
+            return Response({"error": "License not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def reactivate(self, request, pk=None):
+        """Reactivate a revoked license (Admin only)."""
+        try:
+            license_obj = License.objects.get(pk=pk)
+            if license_obj.status == "active":
+                return Response({"error": "License is already active."}, status=status.HTTP_400_BAD_REQUEST)
+            license_obj.status = "active"
+            license_obj.save()
+            return Response({"message": "License reactivated successfully."}, status=status.HTTP_200_OK)
+        except License.DoesNotExist:
+            return Response({"error": "License not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    def destroy(self, request, pk=None):
+        """Delete a generated license (Admin only)."""
+        try:
+            license_obj = License.objects.get(pk=pk)
+            license_obj.delete()
+            return Response({"message": "License deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+        except License.DoesNotExist:
+            return Response({"error": "License not found."}, status=status.HTTP_404_NOT_FOUND)

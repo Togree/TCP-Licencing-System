@@ -1,5 +1,3 @@
-"""
-"""
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework import routers
@@ -20,6 +18,12 @@ urlpatterns = [
     path('api/gettoken/', TokenObtainPairView.as_view(), name="gettoken"),
     path('api/refresh_token/', TokenRefreshView.as_view(), name="refresh_token"),
     path('api/userinfo/', UserInfoView.as_view(), name='userinfo'),
+
+    # Custom License Actions
+    path('api/licenses/<int:pk>/revoke/', LicenseViewSet.as_view({'post': 'revoke'}), name='revoke-license'),
+    path('api/licenses/<int:pk>/reactivate/', LicenseViewSet.as_view({'post': 'reactivate'}), name='reactivate-license'),
+
+    # License verification
     path('api/licenses/verify/', LicenseViewSet.as_view({'post': 'verify'}), name='verify-license'),
 ]
 
