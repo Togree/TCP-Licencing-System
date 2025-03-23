@@ -5,7 +5,7 @@ from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from licenseManager import settings
-from licenses.views import UserViewSet, AdminUserViewSet, UserInfoView, LicenseViewSet
+from licenses.views import UserViewSet, AdminUserViewSet, UserInfoView, LicenseViewSet, PublicKeyView
 
 router = routers.DefaultRouter()
 router.register(r'users', UserViewSet, basename='user')
@@ -25,6 +25,7 @@ urlpatterns = [
 
     # License verification
     path('api/licenses/verify/', LicenseViewSet.as_view({'post': 'verify'}), name='verify-license'),
+    path("api/public-key/", PublicKeyView.as_view(), name="public-key"),
 ]
 
 # Serve media files during development

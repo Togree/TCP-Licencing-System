@@ -1,4 +1,6 @@
 import json
+import os
+
 import rsa
 
 from django.utils.timezone import now
@@ -13,6 +15,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from licenseManager import settings
 from licenses.models import UserAccount, License
 from licenses.serializers import UserAccountSerializer, UserCreateSerializer, CustomUserSerializer, LicenseSerializer
 from licenses.utils import generate_license, verify_license, load_rsa_keys
@@ -20,6 +23,24 @@ from licenses.utils import generate_license, verify_license, load_rsa_keys
 
 # Create your views here.
 
+# Expose public key API call
+class PublicKeyView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        """Expose the public key via an API."""
+        public_key_path = os.path.join(settings.BASE_DIR, "licenses/keys/public_key.pem")
+
+        if not os.path.exists(public_key_path):
+            return Response({"error": "Public key not found."}, status=404)
+
+        with open(public_key_path, "r") as f:
+            public_key = f.read()
+
+        return Response({"public_key": public_key}, status=200)
+
+
+# Register normal user APi call
 class UserViewSet(viewsets.ViewSet):
     permission_classes_by_action = {
         'create': [AllowAny],
@@ -90,6 +111,7 @@ class UserViewSet(viewsets.ViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+# Register Admin API call
 class AdminUserViewSet(viewsets.ViewSet):
     permission_classes_by_action = {
         'create': [AllowAny],
@@ -155,6 +177,7 @@ class UserInfoView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+# license API call
 class LicenseViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
