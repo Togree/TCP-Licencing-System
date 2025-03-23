@@ -1,160 +1,291 @@
 import os
 import json
 import base64
+import rsa
 from datetime import datetime
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import hashes, serialization
+
+from cryptography.hazmat.primitives import serialization
+from django.utils.timezone import now, timedelta
+
 from licenses.models import License
 
 # Get the absolute path of the current directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Define the keys directory path inside the Django project
-KEYS_DIR = os.path.join(BASE_DIR, "keys")
+KEYS_DIR = os.path.join(BASE_DIR, "keys") 
 
 # Define full paths for private and public keys inside "keys/"
 RSA_PRIVATE_KEY_PATH = os.path.join(KEYS_DIR, "private_key.pem")
 RSA_PUBLIC_KEY_PATH = os.path.join(KEYS_DIR, "public_key.pem")
 
 
+# Generate key pair
 def generate_rsa_key_pair():
     """Generate system-wide RSA key pair if they don't exist."""
-
+    
     # Ensure the keys directory exists
     if not os.path.exists(KEYS_DIR):
         os.makedirs(KEYS_DIR)  # Create the directory if it doesn't exist
 
-    # Debugging: Print where the keys will be stored
     print(f"Private Key Path: {RSA_PRIVATE_KEY_PATH}")
     print(f"Public Key Path: {RSA_PUBLIC_KEY_PATH}")
 
     if not os.path.exists(RSA_PRIVATE_KEY_PATH) or not os.path.exists(RSA_PUBLIC_KEY_PATH):
-        private_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048
-        )
+        # Generate a new RSA key pair (512-bit for compatibility with rsa library)
+        public_key, private_key = rsa.newkeys(512)
 
-        private_pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.TraditionalOpenSSL,
-            encryption_algorithm=serialization.NoEncryption()
-        )
-
-        public_key = private_key.public_key()
-        public_pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        )
-
-        # Save keys inside the "keys/" directory
         try:
             with open(RSA_PRIVATE_KEY_PATH, "wb") as f:
-                f.write(private_pem)
+                f.write(private_key.save_pkcs1("PEM"))
             with open(RSA_PUBLIC_KEY_PATH, "wb") as f:
-                f.write(public_pem)
+                f.write(public_key.save_pkcs1("PEM"))
 
             print(f"RSA Key Pair Generated Successfully! Keys saved in {KEYS_DIR}")
         except Exception as e:
             print(f"Error saving keys: {e}")
     else:
         print(f"RSA Key Pair Already Exists in {KEYS_DIR}.")
+        try:
+            with open(RSA_PRIVATE_KEY_PATH, "rb") as f:
+                private_key = rsa.PrivateKey.load_pkcs1(f.read())
+            with open(RSA_PUBLIC_KEY_PATH, "rb") as f:
+                public_key = rsa.PublicKey.load_pkcs1(f.read())
+
+            print("Loaded existing RSA keys successfully.")
+        except Exception as e:
+            print(f"Error loading existing keys: {e}")
 
 
+# Load system-wide key pair
 def load_rsa_keys():
-    """Load RSA private and public keys from files."""
+    """Load RSA private and public keys in the correct format for the rsa library."""
     if not os.path.exists(RSA_PRIVATE_KEY_PATH) or not os.path.exists(RSA_PUBLIC_KEY_PATH):
         raise FileNotFoundError("RSA key pair not found! Run `generate_rsa_key_pair()` first.")
 
+    # Load private key
     with open(RSA_PRIVATE_KEY_PATH, "rb") as f:
-        private_key = serialization.load_pem_private_key(f.read(), password=None)
+        private_key = rsa.PrivateKey.load_pkcs1(f.read())
 
+    # Load public key
     with open(RSA_PUBLIC_KEY_PATH, "rb") as f:
-        public_key = private_key.public_key()
+        public_key = rsa.PublicKey.load_pkcs1(f.read())
 
     return private_key, public_key
 
 
-def generate_license(client_id, license_type, exp=None):
+# Generate licence
+def generate_license(client_id, license_type, exp=None, duration_days=None):
     """
     Generate a signed license for a client.
 
     :param client_id: Unique identifier for the client.
-    :param license_type: Type of license (e.g., 'pro', 'enterprise').
-    :param exp: Expiry date (optional).
-    :return: License object.
+    :param license_type: Type of license (e.g., 'Standard', 'Premium').
+    :param exp: Expiration date in ISO format (optional).
+    :param duration_days: Number of days until expiration (optional).
+    :return: License model instance.
     """
-    private_key, _ = load_rsa_keys()  # Load system-wide private key
+    private_key, _ = load_rsa_keys()  # Ensure this function correctly loads RSA keys
+    issued_at = now()
 
-    # Create license data
+    # Set expiration date
+    if exp:
+        try:
+            expiration_date = datetime.fromisoformat(exp.replace("Z", "+00:00"))
+        except ValueError:
+            raise ValueError("Invalid date format. Use ISO 8601 format (e.g., '2025-04-21T12:00:00Z').")
+    elif duration_days is not None:
+        expiration_date = issued_at + timedelta(days=int(duration_days))
+    else:
+        expiration_date = None  # Handle Premium case where there's no expiration
+
+    # License data for signing
     license_data = {
         "client_id": client_id,
         "license_type": license_type,
-        "issued_at": str(datetime.utcnow()),  # Use UTC timestamp
-        "exp": str(exp) if exp else None
+        "issued_at": issued_at.strftime("%Y-%m-%d %H:%M:%S"),
+        "exp": expiration_date.strftime("%Y-%m-%d %H:%M:%S") if expiration_date else "Never",
     }
 
-    # Convert to JSON string
-    license_json = json.dumps(license_data, separators=(',', ':'))
+    # Convert to JSON and sign
+    license_json = json.dumps(license_data, separators=(',', ':'), sort_keys=True)
+    print(f"License JSON used for Signing: {license_json}")
 
-    # Sign the license data
-    signature = private_key.sign(
-        license_json.encode(),
-        padding.PKCS1v15(),
-        hashes.SHA256()
-    )
+    signature = rsa.sign(license_json.encode(), private_key, "SHA-256").hex()
+    print(f"Generated Signature (Hex): {signature}")
 
-    # Encode signature in base64 for easy storage
-    signature_b64 = base64.b64encode(signature).decode()
-
-    # Save to the database
-    license_obj = License.objects.create(
+    # Save to Django database
+    license_obj, created = License.objects.update_or_create(
         client_id=client_id,
-        license_type=license_type,
-        exp=exp,
-        signature=signature_b64
+        defaults={
+            "license_type": license_type,
+            "issued_at": issued_at,
+            "exp": expiration_date if expiration_date else None,
+            "signature": signature,
+            "status": "active"
+        }
     )
 
-    return license_obj
+    print(f"License stored in Django DB for client {client_id}.")
+    return license_obj  # Return the License model instance instead of JSON
 
 
-def verify_license(license_obj):
+# verify licence
+def verify_license(client_id, provided_signature):
     """
-    Verify a license by checking its signature.
+    Verify a license by checking its signature and expiration.
 
-    :param license_obj: License object from the database.
-    :return: True if valid, False otherwise.
+    :param client_id: The client's unique identifier.
+    :param provided_signature: The signature received for verification (hex-encoded).
+    :return: Dictionary with status and message.
     """
-    _, public_key = load_rsa_keys()  # Load system-wide public key
-
-    # Reconstruct the original license data
-    license_data = {
-        "client_id": license_obj.client_id,
-        "license_type": license_obj.license_type,
-        "issued_at": str(license_obj.issued_at),
-        "exp": str(license_obj.exp) if license_obj.exp else None
-    }
-
-    # Convert to JSON
-    license_json = json.dumps(license_data, separators=(',', ':'))
-
     try:
-        # Decode the stored signature from base64
-        signature_bytes = base64.b64decode(license_obj.signature)
+        # Load the system-wide public key
+        _, public_key = load_rsa_keys()
 
-        # Verify the signature
-        public_key.verify(
-            signature_bytes,
-            license_json.encode(),
-            padding.PKCS1v15(),
-            hashes.SHA256()
-        )
+        # Fetch the license from Django ORM
+        try:
+            license_obj = License.objects.get(client_id=client_id)
+        except License.DoesNotExist:
+            return {"status": "error", "message": "License not found."}
 
-        return True  # License is valid
+        # Check if the license is revoked
+        if license_obj.status == "revoked":
+            return {"status": "error", "message": "License is revoked."}
+
+        # Check expiration if it's not a Premium license
+        if license_obj.license_type != "Premium" and license_obj.exp is not None:
+            if now() > license_obj.exp:
+                return {"status": "error", "message": "License has expired."}
+
+        # Reconstruct the original license data
+        license_data = {
+            "client_id": client_id,
+            "license_type": license_obj.license_type,
+            "issued_at": license_obj.issued_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "exp": license_obj.exp.strftime("%Y-%m-%d %H:%M:%S") if license_obj.exp else "Never"
+        }
+        license_json = json.dumps(license_data, separators=(',', ':'), sort_keys=True).encode()
+
+        # Convert provided signature to bytes
+        provided_signature_bytes = bytes.fromhex(provided_signature)
+
+        # Verify the signature using RSA
+        try:
+            rsa.verify(license_json, provided_signature_bytes, public_key)
+            return {"status": "success", "message": "License is valid."}
+        except rsa.VerificationError:
+            return {"status": "error", "message": "Invalid signature or license tampered with."}
 
     except Exception as e:
-        print(f"License verification failed: {e}")
-        return False  # License is invalid
+        return {"status": "error", "message": f"License verification failed: {str(e)}"}
 
+# def verify_license(client_id, provided_signature):
+#     """
+#     Verify a license by checking its signature and expiration.
+#
+#     :param client_id: The client's unique identifier.
+#     :param provided_signature: The signature received for verification (hex-encoded).
+#     :return: Dictionary with status and message.
+#     """
+#     try:
+#         # Load the system-wide public key
+#         _, public_key = load_rsa_keys()
+#
+#         # Fetch the license from Django ORM
+#         try:
+#             license_obj = License.objects.get(client_id=client_id)
+#         except License.DoesNotExist:
+#             return {"status": "error", "message": "License not found."}
+#
+#         # Check if the license is revoked
+#         if license_obj.status == "revoked":
+#             return {"status": "error", "message": "License is revoked."}
+#
+#         # Check expiration if it's not a Premium license
+#         if license_obj.license_type != "Premium" and license_obj.exp != "Never":
+#             expiration = datetime.datetime.strptime(license_obj.exp, "%Y-%m-%d %H:%M:%S")
+#             if now() > expiration:
+#                 return {"status": "error", "message": "License has expired."}
+#
+#         # Reconstruct the original license data
+#         license_data = {
+#             "client_id": client_id,
+#             "license_type": license_obj.license_type,
+#             "issued_at": license_obj.issued_at.strftime("%Y-%m-%d %H:%M:%S"),
+#             "exp": license_obj.exp
+#         }
+#         license_json = json.dumps(license_data, separators=(',', ':'), sort_keys=True).encode()
+#
+#         # Convert provided and stored signatures to bytes
+#         provided_signature_bytes = bytes.fromhex(provided_signature)
+#         stored_signature_bytes = bytes.fromhex(license_obj.signature)
+#
+#         # Check if the provided signature matches the stored one
+#         if provided_signature_bytes != stored_signature_bytes:
+#             return {"status": "error", "message": "Signature mismatch."}
+#
+#         # Verify the signature using RSA
+#         try:
+#             rsa.verify(license_json, provided_signature_bytes, public_key)
+#             return {"status": "success", "message": "License is valid."}
+#         except rsa.VerificationError:
+#             return {"status": "error", "message": "Invalid signature or license tampered with."}
+#
+#     except Exception as e:
+#         return {"status": "error", "message": f"License verification failed: {e}"}
+#
+
+# Revoke licence
+def revoke_license(client_id):
+    """
+    Marks a license as revoked in the Django database.
+    
+    :param client_id: The client's unique identifier.
+    :return: Confirmation message.
+    """
+    try:
+        license_obj = License.objects.get(client_id=client_id)
+        license_obj.status = "revoked"
+        license_obj.save()
+        return {"status": "success", "message": f"License for {client_id} has been revoked."}
+    except License.DoesNotExist:
+        return {"status": "error", "message": "License not found."}
+
+
+# Reactivate Licence
+def reactivate_license(client_id, additional_days):
+    """
+    Reactivates an expired/revoked license by extending its validity.
+    
+    :param client_id: The client's unique identifier.
+    :param additional_days: Number of days to extend the license.
+    :return: Confirmation message.
+    """
+    try:
+        license_obj = License.objects.get(client_id=client_id)
+    except License.DoesNotExist:
+        return {"status": "error", "message": "License not found."}
+
+    # Premium licenses do not expire
+    if license_obj.license_type == "Premium":
+        return {"status": "error", "message": "Premium licenses do not expire."}
+
+    # If the license has no expiration date
+    if license_obj.exp == "Never":
+        return {"status": "error", "message": "This license does not have an expiration date."}
+
+    # Extend the expiration date
+    expiration_date = datetime.strptime(license_obj.exp, "%Y-%m-%d %H:%M:%S")
+    new_expiration_date = expiration_date + timedelta(days=additional_days)
+    license_obj.exp = new_expiration_date.strftime("%Y-%m-%d %H:%M:%S")
+    license_obj.status = "active"  # Reactivate the license
+    license_obj.save()
+
+    return {
+        "status": "success",
+        "message": f"License for {client_id} reactivated until {license_obj.exp}."
+    }
 
 # Run this when Django starts to ensure the keys exist
 generate_rsa_key_pair()
