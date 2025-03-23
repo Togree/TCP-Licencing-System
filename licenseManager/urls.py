@@ -20,6 +20,7 @@ urlpatterns = [
     path('api/gettoken/', TokenObtainPairView.as_view(), name="gettoken"),
     path('api/refresh_token/', TokenRefreshView.as_view(), name="refresh_token"),
     path('api/userinfo/', UserInfoView.as_view(), name='userinfo'),
+    path('api/licenses/verify/', LicenseViewSet.as_view({'post': 'verify'}), name='verify-license'),
 ]
 
 # Serve media files during development
