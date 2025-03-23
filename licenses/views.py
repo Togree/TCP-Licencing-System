@@ -1,6 +1,13 @@
+import json
+import rsa
+
+from django.utils.timezone import now
+from datetime import datetime, timedelta
+
 from django.contrib.auth.hashers import make_password
 from django.shortcuts import render, get_object_or_404
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.response import Response
@@ -8,7 +15,7 @@ from rest_framework.views import APIView
 
 from licenses.models import UserAccount, License
 from licenses.serializers import UserAccountSerializer, UserCreateSerializer, CustomUserSerializer, LicenseSerializer
-from licenses.utils import generate_license, verify_license
+from licenses.utils import generate_license, verify_license, load_rsa_keys
 
 
 # Create your views here.
@@ -152,35 +159,85 @@ class LicenseViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     def list(self, request):
+        """
+        List all licenses.
+        """
         try:
             licenses = License.objects.all()
             serializer = LicenseSerializer(licenses, many=True, context={"request": request})
-            response_data = serializer.data
-            response_dict = {"error": False, "message": "All Licenses", "data": response_data}
-
-        except ValidationError as e:
-            response_dict = {"error": True, "message": "Validation Error", "details": str(e)}
+            return Response({"error": False, "message": "All Licenses", "data": serializer.data}, status=status.HTTP_200_OK)
         except Exception as e:
-            response_dict = {"error": True, "message": "An Error Occurred", "details": str(e)}
-
-        return Response(response_dict,
-                        status=status.HTTP_400_BAD_REQUEST if response_dict['error'] else status.HTTP_200_OK)
+            return Response({"error": True, "message": "An Error Occurred", "details": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def create(self, request):
+        """
+        Create a new license.
+        """
         client_id = request.data.get("client_id")
         license_type = request.data.get("license_type")
         exp = request.data.get("exp", None)
+        duration_days = request.data.get("duration_days", None)
 
         if not client_id or not license_type:
             return Response({"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST)
 
-        license_obj = generate_license(client_id, license_type, exp)
-        return Response({"message": "License created", "data": LicenseSerializer(license_obj).data}, status=status.HTTP_201_CREATED)
+        # Convert exp to datetime if provided
+        expiration_date = None
+        if exp:
+            try:
+                expiration_date = datetime.fromisoformat(exp.replace("Z", "+00:00"))
+            except ValueError:
+                return Response({"error": "Invalid expiry date format. Use ISO 8601 (e.g., '2025-04-21T12:00:00Z')."},
+                                status=status.HTTP_400_BAD_REQUEST)
+        elif duration_days:
+            try:
+                expiration_date = now() + timedelta(days=int(duration_days))
+            except ValueError:
+                return Response({"error": "Invalid duration_days format. Must be an integer."},
+                                status=status.HTTP_400_BAD_REQUEST)
 
-    def verify(self, request, pk=None):
-        try:
-            license_obj = License.objects.get(pk=pk)
-            is_valid = verify_license(license_obj)
-            return Response({"valid": is_valid}, status=status.HTTP_200_OK)
-        except License.DoesNotExist:
-            return Response({"error": "License not found"}, status=status.HTTP_404_NOT_FOUND)
+        # Check if license already exists for the client
+        if License.objects.filter(client_id=client_id).exists():
+            return Response({"error": "License for this client already exists."}, status=status.HTTP_409_CONFLICT)
+
+        # Generate RSA key and sign the license data
+        private_key, _ = load_rsa_keys()  # Load RSA keys
+        issued_at = now()
+
+        # License data for signing
+        license_data = {
+            "client_id": client_id,
+            "license_type": license_type,
+            "issued_at": issued_at.strftime("%Y-%m-%d %H:%M:%S"),
+            "exp": expiration_date.strftime("%Y-%m-%d %H:%M:%S") if expiration_date else "Never",
+        }
+
+        # Convert to JSON and sign
+        license_json = json.dumps(license_data, separators=(',', ':'), sort_keys=True)
+        signature = rsa.sign(license_json.encode(), private_key, "SHA-256").hex()
+
+        # Create and save license in DB
+        license_obj = License.objects.create(
+            client_id=client_id,
+            license_type=license_type,
+            issued_at=issued_at,
+            exp=expiration_date,
+            signature=signature,  # Store the signature
+            status="active"
+        )
+
+        return Response({"message": "License created", "data": LicenseSerializer(license_obj).data},
+                        status=status.HTTP_201_CREATED)
+
+
+    @action(detail=False, methods=["post"], permission_classes=[])  # No authentication required
+    def verify(self, request):
+        """Verify a license without authentication."""
+        client_id = request.data.get("client_id")
+        provided_signature = request.data.get("signature")
+
+        if not client_id or not provided_signature:
+            return Response({"status": "error", "message": "Missing required fields."}, status=status.HTTP_400_BAD_REQUEST)
+
+        verification_result = verify_license(client_id, provided_signature)
+        return Response(verification_result, status=status.HTTP_200_OK)
