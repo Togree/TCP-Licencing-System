@@ -13,7 +13,7 @@ from licenses.models import License
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Define the keys directory path inside the Django project
-KEYS_DIR = os.path.join(BASE_DIR, "keys") 
+KEYS_DIR = os.path.join(BASE_DIR, "keys")
 
 # Define full paths for private and public keys inside "keys/"
 RSA_PRIVATE_KEY_PATH = os.path.join(KEYS_DIR, "private_key.pem")
@@ -23,7 +23,7 @@ RSA_PUBLIC_KEY_PATH = os.path.join(KEYS_DIR, "public_key.pem")
 # Generate key pair
 def generate_rsa_key_pair():
     """Generate system-wide RSA key pair if they don't exist."""
-    
+
     # Ensure the keys directory exists
     if not os.path.exists(KEYS_DIR):
         os.makedirs(KEYS_DIR)  # Create the directory if it doesn't exist
@@ -185,7 +185,7 @@ def verify_license(client_id, provided_signature):
 def revoke_license(client_id):
     """
     Marks a license as revoked in the Django database.
-    
+
     :param client_id: The client's unique identifier.
     :return: Confirmation message.
     """
@@ -202,7 +202,7 @@ def revoke_license(client_id):
 def reactivate_license(client_id, additional_days):
     """
     Reactivates an expired/revoked license by extending its validity.
-    
+
     :param client_id: The client's unique identifier.
     :param additional_days: Number of days to extend the license.
     :return: Confirmation message.
